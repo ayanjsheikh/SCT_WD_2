@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orrery — Solar Stopwatch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-0:#05060d;
+    --bg-1:#0c1024;
+    --panel:#10142a;
+    --panel-2:#141a34;
+    --hair:rgba(238,241,251,0.08);
+    --star:#eef1fb;
+    --mist:#8791ab;
+    --teal:#43c6ac;
+    --red:#e0533d;
+
+    /* theme accents (default: solaris) */
+    --a1:#ffb347;
+    --a2:#fc6a3d;
+    --glow:rgba(255,179,71,0.35);
+  }
+
+  [data-theme="nebula"]{
+    --a1:#8b5cf6;
+    --a2:#e05cd9;
+    --glow:rgba(180,92,246,0.35);
+  }
+  [data-theme="aurora"]{
+    --a1:#2dd4bf;
+    --a2:#38bdf8;
+    --glow:rgba(56,189,248,0.32);
+  }
+
+  *{box-sizing:border-box;}
+
+  html,body{
+    margin:0;
+    min-height:100%;
+    background:var(--bg-0);
+    color:var(--star);
+    font-family:'Space Grotesk', sans-serif;
+    overflow-x:hidden;
+  }
+
+  body{
+    position:relative;
+    display:flex;
+    justify-content:center;
+    padding:44px 18px 60px;
+  }
+
+  .stars{
+    position:fixed;
+    inset:0;
+    width:1px;
+    height:1px;
+    border-radius:50%;
+    background:transparent;
+    pointer-events:none;
+    z-index:0;
+  }
+  .stars.s2{animation:twinkle 5s ease-in-out infinite;}
+  .stars.s3{animation:twinkle 7s ease-in-out infinite reverse;}
+
+  @keyframes twinkle{
+    0%,100%{opacity:.5;}
+    50%{opacity:1;}
+  }
+
+  .bg-glow{
+    position:fixed;
+    inset:0;
+    z-index:0;
+    background:
+      radial-gradient(ellipse 700px 500px at 20% 10%, rgba(139,92,246,0.10), transparent 60%),
+      radial-gradient(ellipse 800px 600px at 85% 90%, rgba(56,189,248,0.08), transparent 60%);
+    pointer-events:none;
+  }
+
+  .wrap{
+    position:relative;
+    z-index:1;
+    width:100%;
+    max-width:980px;
+  }
+
+  .top-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:20px;
+    gap:12px;
+    flex-wrap:wrap;
+  }
+
+  .brand{
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+  }
+  .brand .kicker{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10.5px;
+    letter-spacing:.18em;
+    color:var(--mist);
+  }
+  .brand h1{
+    margin:0;
+    font-size:19px;
+    font-weight:700;
+    background:linear-gradient(90deg, var(--star), var(--a1));
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
+  }
+
+  .top-actions{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+
+  .theme-swatches{
+    display:flex;
+    gap:7px;
+    padding:5px;
+    background:var(--panel);
+    border:1px solid var(--hair);
+    border-radius:100px;
+  }
+  .swatch{
+    width:20px;height:20px;
+    border-radius:50%;
+    border:2px solid transparent;
+    cursor:pointer;
+    padding:0;
+  }
+  .swatch[data-t="solaris"]{background:linear-gradient(135deg,#ffb347,#fc6a3d);}
+  .swatch[data-t="nebula"]{background:linear-gradient(135deg,#8b5cf6,#e05cd9);}
+  .swatch[data-t="aurora"]{background:linear-gradient(135deg,#2dd4bf,#38bdf8);}
+  .swatch.active{border-color:var(--star);}
+  .swatch:focus-visible{outline:2px solid var(--star); outline-offset:2px;}
+
+  .icon-btn{
+    width:34px;height:34px;
+    border-radius:50%;
+    background:var(--panel);
+    border:1px solid var(--hair);
+    color:var(--star);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    transition:background .15s ease, transform .08s ease;
+  }
+  .icon-btn:hover{background:var(--panel-2);}
+  .icon-btn:active{transform:scale(0.94);}
+  .icon-btn:focus-visible{outline:2px solid var(--star); outline-offset:2px;}
+  .icon-btn svg{width:16px;height:16px;}
+
+  .stage{
+    display:grid;
+    grid-template-columns:minmax(0,420px) 1fr;
+    gap:26px;
+    align-items:start;
+    transition:grid-template-columns .3s ease;
+  }
+  .stage.focus-mode{grid-template-columns:1fr;}
+  .stage.focus-mode .log-panel{display:none;}
+  .stage.focus-mode .instrument{max-width:520px; margin:0 auto;}
+
+  @media (max-width:760px){
+    .stage{grid-template-columns:1fr;}
+  }
+
+  /* ---------- Instrument ---------- */
+
+  .instrument{
+    background:linear-gradient(180deg, var(--panel), var(--bg-1));
+    border:1px solid var(--hair);
+    border-radius:22px;
+    padding:26px 22px 22px;
+    box-shadow:0 40px 70px -35px rgba(0,0,0,0.75), inset 0 1px 0 rgba(255,255,255,0.03);
+    text-align:center;
+  }
+
+  .eyebrow{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10.5px;
+    letter-spacing:.16em;
+    color:var(--mist);
+    margin-bottom:18px;
+  }
+  .eyebrow span{color:var(--a1); font-weight:600;}
+
+  .orrery{
+    position:relative;
+    width:min(300px, 76vw);
+    aspect-ratio:1/1;
+    margin:0 auto 24px;
+  }
+
+  .orrery svg.rings{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+  }
+
+  .comet-wrap{
+    position:absolute;
+    inset:0;
+    animation:spin 6s linear infinite;
+    animation-play-state:paused;
+  }
+  .comet-wrap.running{animation-play-state:running;}
+  @keyframes spin{ to { transform:rotate(360deg); } }
+
+  .comet{
+    position:absolute;
+    top:2.5%;
+    left:50%;
+    width:6px;height:6px;
+    margin-left:-3px;
+    border-radius:50%;
+    background:var(--a1);
+    box-shadow:0 0 10px 3px var(--glow);
+  }
+
+  .planet-layer{
+    position:absolute;
+    inset:0;
+  }
+  .planet{
+    position:absolute;
+    width:10px;height:10px;
+    margin:-5px 0 0 -5px;
+    border-radius:50%;
+    box-shadow:0 0 8px 1px rgba(255,255,255,0.25);
+    transform:scale(0);
+    animation:pop .4s cubic-bezier(.34,1.56,.64,1) forwards;
+  }
+  @keyframes pop{ to{ transform:scale(1); } }
+
+  .sun{
+    position:absolute;
+    inset:26%;
+    border-radius:50%;
+    background:radial-gradient(circle at 42% 38%, color-mix(in srgb, var(--a1) 90%, white 10%), var(--a2) 65%, #7a2e12 100%);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    box-shadow:0 0 40px 6px var(--glow), inset 0 -8px 16px rgba(0,0,0,0.25);
+  }
+  .sun.running{animation:pulse 2.4s ease-in-out infinite;}
+  @keyframes pulse{
+    0%,100%{ box-shadow:0 0 40px 6px var(--glow), inset 0 -8px 16px rgba(0,0,0,0.25); }
+    50%{ box-shadow:0 0 56px 14px var(--glow), inset 0 -8px 16px rgba(0,0,0,0.25); }
+  }
+
+  .time{
+    font-family:'Orbitron', sans-serif;
+    font-weight:700;
+    font-size:clamp(20px, 5.4vw, 28px);
+    color:#1b0f04;
+    letter-spacing:.01em;
+    font-variant-numeric:tabular-nums;
+    text-shadow:0 1px 0 rgba(255,255,255,0.25);
+  }
+  .time .frac{
+    font-size:.62em;
+    opacity:.75;
+  }
+
+  .status{
+    margin-top:5px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:9.5px;
+    letter-spacing:.16em;
+    color:#241407;
+    opacity:.75;
+  }
+
+  .controls{
+    display:flex;
+    justify-content:center;
+    gap:10px;
+    margin-bottom:14px;
+    flex-wrap:wrap;
+  }
+
+  .btn{
+    font-family:'Space Grotesk', sans-serif;
+    font-size:13px;
+    letter-spacing:.02em;
+    font-weight:600;
+    padding:11px 18px;
+    border-radius:12px;
+    border:1px solid transparent;
+    cursor:pointer;
+    transition:transform .08s ease, filter .15s ease, opacity .15s ease, background .15s ease;
+    min-width:84px;
+  }
+  .btn:active{transform:translateY(1px) scale(0.98);}
+  .btn:focus-visible{outline:2px solid var(--star); outline-offset:3px;}
+  .btn:disabled{opacity:.32; cursor:not-allowed;}
+
+  .btn-primary{
+    background:linear-gradient(135deg, var(--a1), var(--a2));
+    color:#1b0f04;
+    box-shadow:0 8px 18px -8px var(--glow);
+  }
+  .btn-primary:hover{filter:brightness(1.08);}
+
+  .btn-ghost-teal{
+    background:transparent;
+    color:var(--teal);
+    border-color:rgba(67,198,172,0.4);
+  }
+  .btn-ghost-teal:hover:not(:disabled){background:rgba(67,198,172,0.1);}
+
+  .btn-ghost-red{
+    background:transparent;
+    color:var(--red);
+    border-color:rgba(224,83,61,0.35);
+  }
+  .btn-ghost-red:hover:not(:disabled){background:rgba(224,83,61,0.1);}
+
+  .options-row{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:16px;
+    margin-bottom:14px;
+    flex-wrap:wrap;
+  }
+
+  .toggle-field{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:11.5px;
+    color:var(--mist);
+    font-family:'IBM Plex Mono', monospace;
+  }
+
+  .toggle{
+    width:34px;height:19px;
+    border-radius:20px;
+    background:var(--panel-2);
+    border:1px solid var(--hair);
+    position:relative;
+    cursor:pointer;
+    padding:0;
+    flex-shrink:0;
+  }
+  .toggle .knob{
+    position:absolute;
+    top:2px; left:2px;
+    width:13px;height:13px;
+    border-radius:50%;
+    background:var(--mist);
+    transition:transform .18s ease, background .18s ease;
+  }
+  .toggle.on{background:color-mix(in srgb, var(--a1) 30%, var(--panel-2));}
+  .toggle.on .knob{
+    transform:translateX(15px);
+    background:var(--a1);
+  }
+  .toggle:focus-visible{outline:2px solid var(--star); outline-offset:2px;}
+
+  .hint{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10px;
+    color:var(--mist);
+    letter-spacing:.03em;
+    margin:0;
+    line-height:1.7;
+  }
+
+  /* ---------- Log panel ---------- */
+
+  .log-panel{
+    background:linear-gradient(180deg, var(--panel), var(--bg-1));
+    border:1px solid var(--hair);
+    border-radius:22px;
+    padding:22px 20px 20px;
+    min-height:300px;
+    box-shadow:0 40px 70px -35px rgba(0,0,0,0.75);
+  }
+
+  .log-header{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    border-bottom:1px solid var(--hair);
+    padding-bottom:12px;
+    margin-bottom:14px;
+    gap:10px;
+  }
+
+  .log-header h2{
+    font-size:19px;
+    font-weight:700;
+    margin:0;
+    color:var(--star);
+  }
+
+  .log-header-right{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+
+  .log-sub{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10.5px;
+    color:var(--mist);
+    letter-spacing:.05em;
+    white-space:nowrap;
+  }
+
+  .stats-row{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:8px;
+    margin-bottom:14px;
+  }
+  .stat-chip{
+    background:var(--panel-2);
+    border:1px solid var(--hair);
+    border-radius:12px;
+    padding:9px 10px;
+    text-align:center;
+  }
+  .stat-chip .stat-label{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:9px;
+    letter-spacing:.1em;
+    color:var(--mist);
+    text-transform:uppercase;
+  }
+  .stat-chip .stat-value{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:14px;
+    font-weight:600;
+    color:var(--star);
+    margin-top:3px;
+    font-variant-numeric:tabular-nums;
+  }
+  .stat-chip.fast .stat-value{color:var(--teal);}
+  .stat-chip.slow .stat-value{color:var(--red);}
+
+  .log-table{
+    display:flex;
+    flex-direction:column;
+    max-height:360px;
+    overflow-y:auto;
+  }
+
+  .log-row{
+    display:grid;
+    grid-template-columns:auto 1fr 1fr 1fr;
+    align-items:center;
+    gap:10px;
+    padding:9px 6px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12.5px;
+    font-variant-numeric:tabular-nums;
+    border-bottom:1px solid var(--hair);
+    animation:rowIn .25s ease both;
+  }
+  @keyframes rowIn{
+    from{ opacity:0; transform:translateY(-4px); }
+    to{ opacity:1; transform:translateY(0); }
+  }
+
+  .log-row-head{
+    font-size:9.5px;
+    letter-spacing:.1em;
+    color:var(--mist);
+    text-transform:uppercase;
+    border-bottom:1px solid rgba(238,241,251,0.16);
+    animation:none;
+  }
+
+  .log-row:not(.log-row-head):hover{background:rgba(238,241,251,0.03);}
+
+  .planet-dot{
+    width:9px;height:9px;
+    border-radius:50%;
+    display:inline-block;
+    box-shadow:0 0 6px 1px rgba(255,255,255,0.2);
+  }
+  .lap-id{display:flex; align-items:center; gap:7px;}
+  .lap-id .lap-num{color:var(--a1); font-weight:600;}
+  .planet-name{color:var(--mist); font-size:10.5px;}
+
+  .log-row.fastest .split{color:var(--teal); font-weight:600;}
+  .log-row.slowest .split{color:var(--red); font-weight:600;}
+
+  .log-empty{
+    padding:36px 10px;
+    text-align:center;
+    color:var(--mist);
+    font-size:12.5px;
+    line-height:1.7;
+  }
+
+  .log-table::-webkit-scrollbar{width:8px;}
+  .log-table::-webkit-scrollbar-thumb{background:rgba(238,241,251,0.15); border-radius:8px;}
+
+  .toast{
+    position:fixed;
+    bottom:26px;
+    left:50%;
+    transform:translateX(-50%) translateY(20px);
+    background:var(--panel-2);
+    border:1px solid var(--hair);
+    color:var(--star);
+    padding:10px 18px;
+    border-radius:100px;
+    font-size:12.5px;
+    font-family:'IBM Plex Mono', monospace;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .25s ease, transform .25s ease;
+    z-index:10;
+  }
+  .toast.show{
+    opacity:1;
+    transform:translateX(-50%) translateY(0);
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important;}
+  }
+
+  .sr-only{
+    position:absolute;
+    width:1px;height:1px;
+    overflow:hidden;
+    clip:rect(0,0,0,0);
+  }
+</style>
+</head>
+<body>
+
+<div class="stars s1" aria-hidden="true"></div>
+<div class="stars s2" aria-hidden="true"></div>
+<div class="stars s3" aria-hidden="true"></div>
+<div class="bg-glow" aria-hidden="true"></div>
+
+<div class="wrap">
+
+  <div class="top-row">
+    <div class="brand">
+      <span class="kicker">ORRERY TIMEKEEPER</span>
+      <h1>Solar Stopwatch</h1>
+    </div>
+    <div class="top-actions">
+      <div class="theme-swatches" role="group" aria-label="Colour theme">
+        <button class="swatch active" data-t="solaris" aria-label="Solaris theme" aria-pressed="true"></button>
+        <button class="swatch" data-t="nebula" aria-label="Nebula theme" aria-pressed="false"></button>
+        <button class="swatch" data-t="aurora" aria-label="Aurora theme" aria-pressed="false"></button>
+      </div>
+      <button class="icon-btn" id="soundBtn" aria-pressed="true" aria-label="Toggle sound">
+        <svg id="soundIconOn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.5 8.5a5 5 0 0 1 0 7"></path><path d="M18.5 5.5a9 9 0 0 1 0 13"></path></svg>
+        <svg id="soundIconOff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+      </button>
+      <button class="icon-btn" id="focusBtn" aria-pressed="false" aria-label="Toggle focus mode">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"></path><path d="M21 8V5a2 2 0 0 0-2-2h-3"></path><path d="M3 16v3a2 2 0 0 0 2 2h3"></path><path d="M16 21h3a2 2 0 0 0 2-2v-3"></path></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="stage" id="stage">
+
+    <div class="instrument">
+      <div class="eyebrow">MISSION CLOCK — ORBIT <span id="orbitNumber">01</span></div>
+
+      <div class="orrery">
+        <svg class="rings" viewBox="0 0 300 300" aria-hidden="true">
+          <circle cx="150" cy="150" r="70" fill="none" stroke="rgba(238,241,251,0.10)" stroke-width="1"/>
+          <circle cx="150" cy="150" r="88" fill="none" stroke="rgba(238,241,251,0.09)" stroke-width="1"/>
+          <circle cx="150" cy="150" r="106" fill="none" stroke="rgba(238,241,251,0.08)" stroke-width="1"/>
+          <circle cx="150" cy="150" r="124" fill="none" stroke="rgba(238,241,251,0.07)" stroke-width="1"/>
+          <circle cx="150" cy="150" r="141" fill="none" stroke="rgba(238,241,251,0.10)" stroke-width="1" stroke-dasharray="1 5"/>
+        </svg>
+
+        <div class="comet-wrap" id="cometWrap">
+          <div class="comet"></div>
+        </div>
+
+        <div class="planet-layer" id="planetLayer"></div>
+
+        <div class="sun" id="sun">
+          <div class="time" id="timeDisplay" role="timer" aria-live="off">00:00<span class="frac">.00</span></div>
+          <div class="status" id="statusLabel">STOPPED</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="btn btn-primary" id="startPauseBtn">Start</button>
+        <button class="btn btn-ghost-teal" id="lapBtn" disabled>Lap</button>
+        <button class="btn btn-ghost-red" id="resetBtn" disabled>Reset</button>
+      </div>
+
+      <div class="options-row">
+        <div class="toggle-field">
+          <span>MS precision</span>
+          <button class="toggle" id="precisionToggle" role="switch" aria-checked="false" aria-label="Toggle millisecond precision">
+            <span class="knob"></span>
+          </button>
+        </div>
+      </div>
+
+      <p class="hint">Space start/pause &nbsp;·&nbsp; L lap &nbsp;·&nbsp; R reset &nbsp;·&nbsp; C theme &nbsp;·&nbsp; M mute &nbsp;·&nbsp; F focus</p>
+    </div>
+
+    <div class="log-panel">
+      <div class="log-header">
+        <h2>Mission Log</h2>
+        <div class="log-header-right">
+          <span class="log-sub" id="lapCount">0 entries</span>
+          <button class="icon-btn" id="copyBtn" aria-label="Copy log to clipboard">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="stats-row" id="statsRow" style="display:none">
+        <div class="stat-chip fast">
+          <div class="stat-label">Fastest</div>
+          <div class="stat-value" id="statFast">—</div>
+        </div>
+        <div class="stat-chip">
+          <div class="stat-label">Average</div>
+          <div class="stat-value" id="statAvg">—</div>
+        </div>
+        <div class="stat-chip slow">
+          <div class="stat-label">Slowest</div>
+          <div class="stat-value" id="statSlow">—</div>
+        </div>
+      </div>
+
+      <div class="log-table" id="logTable">
+        <div class="log-row log-row-head">
+          <span></span><span>Split</span><span>Total</span><span></span>
+        </div>
+        <div class="log-empty" id="logEmpty">No laps recorded yet. Launch the chronometer, then log a lap to place the first planet in orbit.</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<span class="sr-only" id="announcer" aria-live="polite"></span>
+
+<script>
+(function(){
+
+  /* ---------------- starfield ---------------- */
+  function genStars(layerEl, count, sizePx, opacity){
+    const shadows = [];
+    for(let i=0;i<count;i++){
+      const x = (Math.random()*100).toFixed(2);
+      const y = (Math.random()*100).toFixed(2);
+      shadows.push(`${x}vw ${y}vh rgba(238,241,251,${opacity})`);
+    }
+    layerEl.style.boxShadow = shadows.join(',');
+    layerEl.style.width = sizePx+'px';
+    layerEl.style.height = sizePx+'px';
+  }
+  genStars(document.querySelector('.stars.s1'), 140, 1, 0.7);
+  genStars(document.querySelector('.stars.s2'), 60, 2, 0.9);
+  genStars(document.querySelector('.stars.s3'), 30, 1, 0.6);
+
+  /* ---------------- planet data ---------------- */
+  const PLANETS = [
+    { name:'Mercury', color:'#b5a695', r:70 },
+    { name:'Venus',   color:'#e8c39e', r:88 },
+    { name:'Earth',   color:'#4f8fdb', r:106 },
+    { name:'Mars',    color:'#d9603a', r:124 },
+    { name:'Jupiter', color:'#d9a066', r:141 },
+    { name:'Saturn',  color:'#e8d0a0', r:106 },
+    { name:'Uranus',  color:'#7ec8c8', r:88 },
+    { name:'Neptune', color:'#4a5fd9', r:70 },
+  ];
+
+  /* ---------------- state ---------------- */
+  let running = false;
+  let startTimestamp = 0;
+  let accumulated = 0;
+  let rafId = null;
+  let laps = [];
+  let orbitNumber = 1;
+  let soundOn = true;
+  let msPrecision = false;
+  let audioCtx = null;
+
+  const THEMES = ['solaris','nebula','aurora'];
+  let themeIdx = 0;
+
+  const timeDisplay = document.getElementById('timeDisplay');
+  const statusLabel = document.getElementById('statusLabel');
+  const sun = document.getElementById('sun');
+  const cometWrap = document.getElementById('cometWrap');
+  const planetLayer = document.getElementById('planetLayer');
+  const startPauseBtn = document.getElementById('startPauseBtn');
+  const lapBtn = document.getElementById('lapBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const logTable = document.getElementById('logTable');
+  const logEmpty = document.getElementById('logEmpty');
+  const lapCount = document.getElementById('lapCount');
+  const orbitNumberEl = document.getElementById('orbitNumber');
+  const announcer = document.getElementById('announcer');
+  const statsRow = document.getElementById('statsRow');
+  const statFast = document.getElementById('statFast');
+  const statAvg = document.getElementById('statAvg');
+  const statSlow = document.getElementById('statSlow');
+  const soundBtn = document.getElementById('soundBtn');
+  const soundIconOn = document.getElementById('soundIconOn');
+  const soundIconOff = document.getElementById('soundIconOff');
+  const focusBtn = document.getElementById('focusBtn');
+  const stage = document.getElementById('stage');
+  const copyBtn = document.getElementById('copyBtn');
+  const toast = document.getElementById('toast');
+  const precisionToggle = document.getElementById('precisionToggle');
+
+  /* ---------------- audio ---------------- */
+  function ensureAudio(){
+    if(!audioCtx){
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+  }
+  function beep(freq, duration, type){
+    if(!soundOn) return;
+    try{
+      ensureAudio();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type || 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.12, audioCtx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration + 0.02);
+    }catch(e){ /* audio not available; fail silently */ }
+  }
+
+  /* ---------------- formatting ---------------- */
+  function formatTime(ms){
+    const totalMs = Math.floor(ms);
+    const wholeMs = totalMs % 1000;
+    const totalSec = Math.floor(totalMs/1000);
+    const sec = totalSec % 60;
+    const min = Math.floor(totalSec/60);
+    const pad = (n,l=2) => String(n).padStart(l,'0');
+    if(msPrecision){
+      return { main:`${pad(min)}:${pad(sec)}`, frac: pad(wholeMs,3) };
+    }
+    const cs = Math.floor(wholeMs/10);
+    return { main:`${pad(min)}:${pad(sec)}`, frac: pad(cs) };
+  }
+
+  function currentElapsed(){
+    return running ? accumulated + (performance.now() - startTimestamp) : accumulated;
+  }
+
+  function render(){
+    const { main, frac } = formatTime(currentElapsed());
+    timeDisplay.innerHTML = `${main}<span class="frac">.${frac}</span>`;
+    if(running) rafId = requestAnimationFrame(render);
+  }
+
+  function setStatus(){
+    if(running){
+      statusLabel.textContent = 'RUNNING';
+    } else if(accumulated > 0){
+      statusLabel.textContent = 'PAUSED';
+    } else {
+      statusLabel.textContent = 'STOPPED';
+    }
+  }
+
+  /* ---------------- controls ---------------- */
+  function start(){
+    running = true;
+    startTimestamp = performance.now();
+    startPauseBtn.textContent = 'Pause';
+    lapBtn.disabled = false;
+    resetBtn.disabled = false;
+    sun.classList.add('running');
+    cometWrap.classList.add('running');
+    setStatus();
+    render();
+    beep(660, 0.12, 'triangle');
+    announcer.textContent = 'Chronometer running';
+  }
+
+  function pause(){
+    running = false;
+    accumulated += performance.now() - startTimestamp;
+    cancelAnimationFrame(rafId);
+    startPauseBtn.textContent = 'Resume';
+    sun.classList.remove('running');
+    cometWrap.classList.remove('running');
+    setStatus();
+    beep(420, 0.12, 'triangle');
+    announcer.textContent = 'Chronometer paused';
+  }
+
+  function reset(){
+    if(running) return;
+    accumulated = 0;
+    laps = [];
+    startPauseBtn.textContent = 'Start';
+    lapBtn.disabled = true;
+    resetBtn.disabled = true;
+    timeDisplay.innerHTML = `00:00<span class="frac">.00</span>`;
+    setStatus();
+    planetLayer.innerHTML = '';
+    renderLaps();
+    orbitNumber += 1;
+    orbitNumberEl.textContent = String(orbitNumber).padStart(2,'0');
+    beep(300, 0.09, 'square');
+    setTimeout(()=>beep(240, 0.12, 'square'), 90);
+    announcer.textContent = 'Chronometer reset. New orbit started.';
+  }
+
+  function recordLap(){
+    if(!running) return;
+    const total = currentElapsed();
+    const prevTotal = laps.length ? laps[laps.length-1].total : 0;
+    const split = total - prevTotal;
+    laps.push({ total, split });
+    addPlanet(laps.length - 1);
+    renderLaps();
+    beep(880, 0.09, 'sine');
+    announcer.textContent = `Lap ${laps.length} logged`;
+  }
+
+  function addPlanet(index){
+    const p = PLANETS[index % PLANETS.length];
+    const cycle = Math.floor(index / PLANETS.length);
+    const angleDeg = (index * 137.5) % 360;
+    const angle = angleDeg * Math.PI / 180;
+    const radiusFraction = p.r / 150;
+    const leftPct = 50 + radiusFraction * 50 * Math.cos(angle);
+    const topPct = 50 + radiusFraction * 50 * Math.sin(angle);
+
+    const dot = document.createElement('div');
+    dot.className = 'planet';
+    dot.style.left = leftPct + '%';
+    dot.style.top = topPct + '%';
+    dot.style.background = p.color;
+    dot.title = `${p.name}${cycle>0 ? ' ('+(cycle+1)+')' : ''} — Lap ${index+1}`;
+    planetLayer.appendChild(dot);
+  }
+
+  /* ---------------- log rendering ---------------- */
+  function renderLaps(){
+    [...logTable.querySelectorAll('.log-row:not(.log-row-head)')].forEach(el => el.remove());
+
+    if(laps.length === 0){
+      logEmpty.style.display = 'block';
+      lapCount.textContent = '0 entries';
+      statsRow.style.display = 'none';
+      return;
+    }
+    logEmpty.style.display = 'none';
+    lapCount.textContent = `${laps.length} ${laps.length===1?'entry':'entries'}`;
+
+    let fastestIdx = 0, slowestIdx = 0, sum = 0;
+    laps.forEach((l,i) => {
+      sum += l.split;
+      if(l.split < laps[fastestIdx].split) fastestIdx = i;
+      if(l.split > laps[slowestIdx].split) slowestIdx = i;
+    });
+
+    if(laps.length >= 2){
+      statsRow.style.display = 'grid';
+      statFast.textContent = fmtShort(laps[fastestIdx].split);
+      statSlow.textContent = fmtShort(laps[slowestIdx].split);
+      statAvg.textContent = fmtShort(sum/laps.length);
+    } else {
+      statsRow.style.display = 'none';
+    }
+
+    for(let i = laps.length - 1; i >= 0; i--){
+      const lap = laps[i];
+      const p = PLANETS[i % PLANETS.length];
+      const row = document.createElement('div');
+      row.className = 'log-row';
+      if(laps.length >= 3 && i === fastestIdx) row.classList.add('fastest');
+      if(laps.length >= 3 && i === slowestIdx) row.classList.add('slowest');
+
+      const splitFmt = fmtShort(lap.split);
+      const totalFmt = fmtShort(lap.total);
+
+      row.innerHTML = `
+        <span class="lap-id"><span class="planet-dot" style="background:${p.color}"></span><span class="lap-num">${String(i+1).padStart(2,'0')}</span></span>
+        <span class="split">${splitFmt}</span>
+        <span class="total">${totalFmt}</span>
+        <span class="planet-name">${p.name}</span>
+      `;
+      logTable.appendChild(row);
+    }
+  }
+
+  function fmtShort(ms){
+    const f = formatTime(ms);
+    return `${f.main}.${f.frac}`;
+  }
+
+  /* ---------------- copy log ---------------- */
+  function showToast(msg){
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(()=> toast.classList.remove('show'), 2000);
+  }
+
+  async function copyLog(){
+    if(laps.length === 0){
+      showToast('No laps to copy yet');
+      return;
+    }
+    const lines = laps.map((l,i)=> `Lap ${i+1} (${PLANETS[i%PLANETS.length].name})  split ${fmtShort(l.split)}  total ${fmtShort(l.total)}`);
+    const text = `Mission Log — Orbit ${String(orbitNumber).padStart(2,'0')}\n` + lines.join('\n');
+    try{
+      await navigator.clipboard.writeText(text);
+      showToast('Log copied to clipboard');
+    }catch(e){
+      showToast('Could not copy — try selecting manually');
+    }
+  }
+
+  /* ---------------- theme ---------------- */
+  function applyTheme(name){
+    document.documentElement.setAttribute('data-theme', name);
+    document.querySelectorAll('.swatch').forEach(s=>{
+      const active = s.dataset.t === name;
+      s.classList.toggle('active', active);
+      s.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+  }
+  document.querySelectorAll('.swatch').forEach((s, i)=>{
+    s.addEventListener('click', ()=>{
+      themeIdx = i;
+      applyTheme(s.dataset.t);
+    });
+  });
+  function cycleTheme(){
+    themeIdx = (themeIdx + 1) % THEMES.length;
+    applyTheme(THEMES[themeIdx]);
+  }
+
+  /* ---------------- sound toggle ---------------- */
+  soundBtn.addEventListener('click', ()=>{
+    soundOn = !soundOn;
+    soundBtn.setAttribute('aria-pressed', soundOn ? 'true':'false');
+    soundIconOn.style.display = soundOn ? 'block':'none';
+    soundIconOff.style.display = soundOn ? 'none':'block';
+  });
+
+  /* ---------------- precision toggle ---------------- */
+  precisionToggle.addEventListener('click', ()=>{
+    msPrecision = !msPrecision;
+    precisionToggle.classList.toggle('on', msPrecision);
+    precisionToggle.setAttribute('aria-checked', msPrecision ? 'true':'false');
+    if(!running){
+      const { main, frac } = formatTime(currentElapsed());
+      timeDisplay.innerHTML = `${main}<span class="frac">.${frac}</span>`;
+    }
+  });
+
+  /* ---------------- focus mode ---------------- */
+  function toggleFocus(){
+    const isFocus = stage.classList.toggle('focus-mode');
+    focusBtn.setAttribute('aria-pressed', isFocus ? 'true':'false');
+  }
+  focusBtn.addEventListener('click', toggleFocus);
+
+  /* ---------------- wire up ---------------- */
+  startPauseBtn.addEventListener('click', () => running ? pause() : start());
+  lapBtn.addEventListener('click', recordLap);
+  resetBtn.addEventListener('click', reset);
+  copyBtn.addEventListener('click', copyLog);
+
+  window.addEventListener('keydown', (e) => {
+    if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if(e.code === 'Space'){ e.preventDefault(); running ? pause() : start(); }
+    else if(e.key === 'l' || e.key === 'L'){ recordLap(); }
+    else if(e.key === 'r' || e.key === 'R'){ reset(); }
+    else if(e.key === 'c' || e.key === 'C'){ cycleTheme(); }
+    else if(e.key === 'm' || e.key === 'M'){ soundBtn.click(); }
+    else if(e.key === 'f' || e.key === 'F'){ toggleFocus(); }
+  });
+
+  setStatus();
+})();
+</script>
+
+</body>
+</html>
